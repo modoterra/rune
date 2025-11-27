@@ -1,0 +1,26 @@
+{
+    "name": "modoterra/rune",
+    "version": "0.0.1-alpha",
+    "type": "library",
+    "license": "MIT",
+    "autoload": {
+        "psr-4": {
+            "Modoterra\\Rune\\": "src/",
+            "Tests\\": "tests"
+        }
+    },
+    "authors": [
+        {
+            "name": "Christoffer Hallas",
+            "email": "git@christofferhallas.com"
+        }
+    ],
+    "require-dev": {
+        "pestphp/pest": "^4.1"
+    },
+    "config": {
+        "allow-plugins": {
+            "pestphp/pest-plugin": true
+        }
+    }
+}
