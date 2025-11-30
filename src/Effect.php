@@ -4,98 +4,162 @@ declare(strict_types=1);
 
 namespace Modoterra\Rune;
 
-use Closure;
 use Throwable;
 
+/**
+ * @template-covariant V
+ */
 class Effect
 {
-  private Closure $thunk;
+  /**
+   * @var callable(): Outcome<V>
+   */
+  private $thunk;
 
-  public static function fromThunk(callable $thunk): Effect
+  /**
+   * @template T
+   * @param callable(): Outcome<T> $thunk
+   * @return self<T>
+   */
+  public static function fromThunk(callable $thunk): self
   {
-    return new Effect($thunk);
+    return new self($thunk);
   }
 
-  public static function fromOutcome(Outcome $outcome): Effect
+  /**
+   * @template T
+   * @param Outcome<T> $outcome
+   * @return self<T>
+   */
+  public static function fromOutcome(Outcome $outcome): self
   {
-    return new Effect(fn(): Outcome => $outcome);
+    return new self(fn () => $outcome);
   }
 
-  public static function succeed(mixed $value): Effect
+  /**
+   * @template T
+   * @param T $value
+   * @return self<T>
+   */
+  public static function succeed(mixed $value): self
   {
-    return new Effect(fn(): Outcome => Success::from($value));
+    return self::fromThunk(fn () => Success::from($value));
   }
 
-  public static function fail(Throwable $error): Effect
+  /**
+   * @param Throwable $error
+   * @return self<Failure>
+   */
+  public static function fail(Throwable $error): self
   {
-    return new Effect(fn(): Outcome => Failure::fromThrowable($error));
+    return self::fromThunk(fn () => Failure::fromThrowable($error));
   }
 
-  public static function tryCatch(callable $thunk): Effect
+  /**
+   * @template T
+   * @param callable(): Outcome<T> $thunk
+   * @return self<mixed>
+   */
+  public static function tryCatch(callable $thunk): self
   {
-    return new Effect(function () use ($thunk) {
+    return self::fromThunk(function () use ($thunk) {
       try {
-        return Success::from($thunk());
+        return $thunk();
       } catch (Throwable $error) {
         return Failure::fromThrowable($error);
       }
     });
   }
 
-  public static function all(array $effects): Effect
+  /**
+   * @template T
+   * @param array<self<T>> $effects
+   * @return self<array<T>>
+   */
+  public static function all(array $effects): self
   {
-    return new Effect(function () use ($effects) {
-      $results = [];
-      foreach ($effects as $key => $effect) {
-        $outcome = $effect->run();
-        if ($outcome->didFail()) {
-          return $outcome;
+    return self::fromThunk(
+      function () use ($effects) {
+        $results = [];
+
+        foreach ($effects as $key => $effect) {
+          $outcome = $effect->run();
+          if ($outcome->didFail()) {
+            /** @var Failure */
+            return $outcome;
+          }
+          $results[$key] = $outcome->value();
         }
-        $results[$key] = $outcome->value();
+
+        return Success::from($results);
       }
-      return Success::from($results);
-    });
+    );
   }
 
   /**
-   * Call the underlying thunk and lift the result into an Outcome if necessary.
+   * @return Outcome<V>
    */
   public function run(): Outcome
   {
-    $result = ($this->thunk)();
-    if ($result instanceof Outcome) return $result;
-    return Success::from($result);
+    return ($this->thunk)();
   }
 
-  public function memoize(): Effect
+  /**
+   * @return MemoizedEffect<mixed>
+   */
+  public function memoize(): MemoizedEffect
   {
-    return new MemoizedEffect(fn() => $this->run());
+    return MemoizedEffect::fromThunk($this->thunk);
   }
 
-  public function map(callable $mapper): Effect
+  /**
+   * @template T
+   * @param callable(Outcome<V>): Outcome<T> $mapper
+   * @return self<T>
+   */
+  public function map(callable $mapper): self
   {
-    return new Effect(fn() => $this->run()->map($mapper));
+    return self::fromThunk(fn () => $this->run()->map($mapper));
   }
 
-  public function mapError(callable $mapper): Effect
+  /**
+   * @param callable(Throwable): Throwable $mapper
+   * @return self<V>
+   */
+  public function mapError(callable $mapper): self
   {
-    return new Effect(fn() => $this->run()->mapError($mapper));
+    return self::fromThunk(fn () => $this->run()->mapError($mapper));
   }
 
-  public function flatMap(callable $mapper): Effect
+  /**
+   * @template T
+   * @param callable(V): T $mapper
+   * @return self<T>
+   */
+  public function flatMap(callable $mapper): self
   {
-    return new Effect(fn() => $this->run()->flatMap($mapper));
+    return self::fromThunk(fn () => Success::from($this->run()->flatMap($mapper)));
   }
 
-  public function tap(callable $tap): Effect
+  /**
+   * @param callable(Outcome<V>): void $tap
+   * @return self<V>
+   */
+  public function tap(callable $tap): self
   {
-    return $this->map(function (mixed $value) use ($tap) {
-      $tap($value);
-      return $value;
-    });
+    return $this->map(
+      function ($value) use ($tap) {
+        $tap($value);
+        return $value;
+      }
+    );
   }
 
-  public function tapError(callable $tap): Effect
+  /**
+   * @param callable(Throwable): void $tap
+   * @return self<V>
+   */
+  public function tapError(callable $tap): self
   {
     return $this->mapError(function (Throwable $error) use ($tap) {
       $tap($error);
@@ -105,22 +169,39 @@ class Effect
 
   /**
    * @template T
-   * @param callable(\Throwable): Effect<T> $recovery
-   * @return Effect<T>
+   * @param callable(Throwable): self<T> $rescuer
+   * @return self<V|T>
    */
-  public function recover(callable $recovery): Effect
+  public function recover(callable $rescuer): self
   {
-    return new Effect(fn() => $this->run()->fold(
-      onSuccess: fn(mixed $value) => Success::from($value),
-      onFailure: fn(mixed $error) => $recovery($error)->run()
-    ));
+    return self::fromThunk(
+      function () use ($rescuer) {
+        $outcome = $this->run();
+        if ($outcome->didSucceed()) {
+          return $outcome;
+        }
+
+        /** @var Throwable */
+        $error = $outcome->error();
+        return $rescuer($error)->run();
+      }
+    );
   }
 
+  /**
+   * @template T
+   * @param ?callable(V): T $onSuccess
+   * @param ?callable(Throwable): T $onFailure
+   * @return mixed
+   */
   public function fold(?callable $onSuccess = null, ?callable $onFailure = null): mixed
   {
     return $this->run()->fold($onSuccess, $onFailure);
   }
 
+  /**
+   * @param callable(): Outcome<V> $thunk
+   */
   protected function __construct(callable $thunk)
   {
     $this->thunk = $thunk;

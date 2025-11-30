@@ -2,15 +2,17 @@
 
 use Modoterra\Rune\Effect;
 use Modoterra\Rune\Failure;
+use Modoterra\Rune\Outcome;
 use Modoterra\Rune\Success;
 
 describe('effect', function () {
   describe('fromThunk', function () {
     it('can be created from a thunk', function () {
-      $effect = Effect::fromThunk(fn() => 42);
+      $effect = Effect::fromThunk(fn() => Success::from(42));
       expect($effect)->toBeInstanceOf(Effect::class);
 
       $outcome = $effect->run();
+      $outcome->value();
       expect($outcome)->toBeInstanceOf(Success::class);
       expect($outcome->didSucceed())->toBeTrue();
       expect($outcome->value())->toBe(42);
@@ -54,47 +56,40 @@ describe('effect', function () {
 
   describe('run', function () {
     it('runs the underlying thunk', function () {
-      $effect = Effect::fromThunk(fn() => 100);
+      $effect = Effect::fromThunk(fn() => Success::from(100));
       $outcome = $effect->run();
       expect($outcome)->toBeInstanceOf(Success::class);
       expect($outcome->didSucceed())->toBeTrue();
       expect($outcome->value())->toBe(100);
     });
-
-    it('lifts non-Outcome results into Success', function () {
-      $effect = Effect::fromThunk(fn() => "Hello, World!");
-      $outcome = $effect->run();
-      expect($outcome)->toBeInstanceOf(Success::class);
-      expect($outcome->didSucceed())->toBeTrue();
-      expect($outcome->value())->toBe("Hello, World!");
-    });
   });
 
   describe('map', function () {
     it('maps successful outcomes', function () {
+      /** @var Effect<int> */
       $effect = Effect::succeed(1);
-      $mappedEffect = $effect->map(fn($value) => $value * 2);
-      $outcome = $mappedEffect->run();
+      $doubled = $effect->flatMap(fn($value) => $value * 2);
+      $outcome = $doubled->run();
       expect($outcome)->toBeInstanceOf(Success::class);
       expect($outcome->didSucceed())->toBeTrue();
       expect($outcome->value())->toBe(2);
     });
 
     it('maps with fromThunk', function () {
-      $effect = Effect::fromThunk(fn() => 3);
-      $mappedEffect = $effect->map(fn($value) => $value + 7);
-      $outcome = $mappedEffect->run();
+      $effect = Effect::fromThunk(fn() => Success::from(3));
+      $tripled = $effect->flatMap(fn($value) => $value * 3);
+      $outcome = $tripled->run();
       expect($outcome)->toBeInstanceOf(Success::class);
       expect($outcome->didSucceed())->toBeTrue();
-      expect($outcome->value())->toBe(10);
+      expect($outcome->value())->toBe(9);
     });
   });
 
   describe('flatMap', function () {
     it('flatMaps successful outcomes', function () {
       $effect = Effect::succeed(3);
-      $flatMappedEffect = $effect->flatMap(fn($value) => Effect::succeed($value + 4));
-      $outcome = $flatMappedEffect->run();
+      $plusFour = $effect->flatMap(fn($value) => Effect::succeed($value + 4));
+      $outcome = $plusFour->run();
       expect($outcome)->toBeInstanceOf(Success::class);
       expect($outcome->didSucceed())->toBeTrue();
       expect($outcome->value())->toBe(7);
@@ -125,7 +120,7 @@ describe('effect', function () {
       $counter = 0;
 
       $effect = Effect::fromThunk(function () use (&$counter) {
-        return $counter++;
+        return Success::from($counter++);
       })->memoize();
 
       // Before running, the counter is 0.
@@ -149,7 +144,7 @@ describe('effect', function () {
 
   describe('tryCatch', function () {
     it('creates a successful effect when the thunk does not throw', function () {
-      $effect = Effect::tryCatch(fn() => 10);
+      $effect = Effect::tryCatch(fn() => Success::from(10));
       $outcome = $effect->run();
       expect($outcome)->toBeInstanceOf(Success::class);
       expect($outcome->didSucceed())->toBeTrue();
@@ -180,7 +175,7 @@ describe('effect', function () {
   describe('recover', function () {
     it('recovers from a failed effect', function () {
       $effect = Effect::fail(new Exception("Initial failure"))
-        ->recover(fn() => Effect::succeed(42));
+        ->recover(fn($error) => Effect::succeed(42));
 
       $outcome = $effect->run();
       expect($outcome)->toBeInstanceOf(Success::class);
@@ -300,7 +295,9 @@ describe('effect', function () {
     });
 
     it('handles an empty array of effects', function () {
-      $combinedEffect = Effect::all([]);
+      /** @var array<Effect<int>> */
+      $empty = [];
+      $combinedEffect = Effect::all($empty);
       $outcome = $combinedEffect->run();
 
       expect($outcome)->toBeInstanceOf(Success::class);

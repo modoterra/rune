@@ -4,14 +4,23 @@ declare(strict_types=1);
 
 namespace Modoterra\Rune;
 
+/**
+ * @phpstan-type Hook callable(): void
+ */
 class Lease
 {
   private bool $cancelled = false;
+
+  /**
+   * @var Hook[]
+   */
   private array $hooks = [];
 
   public function cancel(): void
   {
-    if ($this->cancelled) return;
+    if ($this->cancelled) {
+      return;
+    }
     $this->cancelled = true;
 
     foreach ($this->hooks as $hook) {
@@ -26,8 +35,11 @@ class Lease
     return $this->cancelled;
   }
 
-  public function hook(callable $callback): void
+  /**
+   * @param Hook $hook
+   */
+  public function hook(callable $hook): void
   {
-    $this->hooks[] = $callback;
+    $this->hooks[] = $hook;
   }
 }

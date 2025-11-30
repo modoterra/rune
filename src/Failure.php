@@ -1,14 +1,24 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Modoterra\Rune;
 
+use RuntimeException;
 use Throwable;
 
+/**
+ * @extends Outcome<never>
+ */
 class Failure extends Outcome
 {
-  public static function fromThrowable(Throwable $error): Failure
+  /**
+   * @param Throwable $error
+   * @return self
+   */
+  public static function fromThrowable(Throwable $error): self
   {
-    return new Failure($error);
+    return new self($error);
   }
 
   public function didSucceed(): bool
@@ -21,34 +31,44 @@ class Failure extends Outcome
     return true;
   }
 
-  public function map(callable $mapper): Outcome
+  public function map(callable $mapper): self
   {
     return $this;
-  }
-
-  public function mapError(callable $mapper): Outcome
-  {
-    return Failure::fromThrowable($mapper($this->error));
   }
 
   /**
-   * @param mixed|callable $value
+   * @param callable(Throwable): Throwable $mapper
    */
-  public function getOrElse(mixed $value): mixed
+  public function mapError(callable $mapper): self
   {
-    return is_callable($value) ? $value($this->error) : $value;
+    return self::fromThrowable($mapper($this->error));
   }
 
-  public function flatMap(callable $mapper): mixed
+  public function flatMap(callable $mapper): Throwable
   {
-    return $this;
+    return $this->error;
+  }
+
+  public function getOrElse(mixed $value): mixed
+  {
+    return $value;
   }
 
   public function fold(?callable $onSuccess, ?callable $onFailure = null): mixed
   {
-    $onFailure ??= fn(mixed $error) => $error instanceof Throwable ? throw $error : $error;
+    $onFailure ??= fn (mixed $error) => $error instanceof Throwable ? throw $error : $error;
 
     return $onFailure($this->error);
+  }
+
+  public function value(): mixed
+  {
+    throw new RuntimeException("Cannot get value from Failure");
+  }
+
+  public function error(): Throwable
+  {
+    return $this->error;
   }
 
   private function __construct(Throwable $error)

@@ -3,6 +3,9 @@
     "version": "0.0.1-alpha",
     "type": "library",
     "license": "MIT",
+    "require": {
+        "php": "^8.4"
+    },
     "autoload": {
         "psr-4": {
             "Modoterra\\Rune\\": "src/",
@@ -16,7 +19,9 @@
         }
     ],
     "require-dev": {
-        "pestphp/pest": "^4.1"
+        "pestphp/pest": "^4.1",
+        "phpstan/phpstan": "^2.1",
+        "friendsofphp/php-cs-fixer": "^3.91"
     },
     "config": {
         "allow-plugins": {

@@ -9,7 +9,7 @@ class Scheduler
   private bool $running = false;
 
   /**
-   * @var Enactor[]
+   * @var Enactor<mixed>[]
    */
   private array $queue = [];
 
@@ -18,6 +18,17 @@ class Scheduler
    */
   private array $timers = [];
 
+  /**
+   * @return self
+   */
+  public static function create(): self
+  {
+    return new self();
+  }
+
+  /**
+   * @param Enactor<mixed> $enactor
+   */
   public function schedule(Enactor $enactor): void
   {
     $this->queue[] = $enactor;
@@ -29,6 +40,10 @@ class Scheduler
     while ($this->running && $this->hasWork()) {
       $this->tick();
     }
+  }
+
+  private function __construct()
+  {
   }
 
   private function tick(): void

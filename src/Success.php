@@ -1,17 +1,26 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Modoterra\Rune;
 
+use RuntimeException;
+use Throwable;
+
+/**
+ * @template-covariant V
+ * @extends Outcome<V>
+ */
 class Success extends Outcome
 {
-  public static function from(mixed $value): Success
+  /**
+   * @template T
+   * @param T $value
+   * @return self<T>
+   */
+  public static function from(mixed $value): self
   {
     return new Success($value);
-  }
-
-  private function __construct(mixed $value)
-  {
-    $this->value = $value;
   }
 
   public function didSucceed(): bool
@@ -24,30 +33,56 @@ class Success extends Outcome
     return false;
   }
 
-  public function map(callable $mapper): Outcome
+  /**
+   * @template T
+   * @param callable(V): T $mapper
+   * @return self<T>
+   */
+  public function map(callable $mapper): self
   {
-    return Success::from($mapper($this->value));
+    return self::from($mapper($this->value()));
   }
 
-  public function mapError(callable $_): Outcome
+  /**
+   * @param callable(Throwable): Throwable $mapper
+   * @return self<never>
+   */
+  public function mapError(callable $mapper): self
   {
     return $this;
   }
 
-  public function flatMap(callable $mapper): Outcome
+  /**
+   * @param callable(mixed): mixed $mapper
+   */
+  public function flatMap(callable $mapper): mixed
   {
-    return $mapper($this->value)->run();
+    return $mapper($this->value());
   }
 
-  public function getOrElse(mixed $_): mixed
+  public function getOrElse(mixed $value): mixed
+  {
+    return $this->value();
+  }
+
+  /**
+   * @param ?callable(mixed): mixed $onSuccess
+   * @param ?callable(Throwable): Throwable $onFailure
+   */
+  public function fold(?callable $onSuccess = null, ?callable $onFailure = null): mixed
+  {
+    $onSuccess ??= fn (mixed $value) => $value;
+
+    return $onSuccess($this->value());
+  }
+
+  public function value(): mixed
   {
     return $this->value;
   }
 
-  public function fold(?callable $onSuccess = null, ?callable $onFailure = null): mixed
+  public function error(): Throwable
   {
-    $onSuccess ??= fn(mixed $value) => $value;
-
-    return $onSuccess($this->value);
+    throw new RuntimeException("Cannot get error from Success");
   }
 }

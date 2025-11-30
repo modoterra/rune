@@ -8,15 +8,22 @@ class Runtime
 {
   private Scheduler $scheduler;
 
-  public static function default(): Runtime
+  public static function default(): self
   {
-    return new Runtime(new Scheduler());
+    return new self(Scheduler::create());
   }
 
+  /**
+   * @template T
+   * @param Effect<T> $effect
+   * @param ?Lease $lease
+   * @return Enactor<T>
+   */
   public function schedule(Effect $effect, ?Lease $lease = null): Enactor
   {
-    $enactor = Enactor::create($effect);
-    $this->scheduler->schedule($enactor, $lease);
+    $enactor = Enactor::create($effect, $lease);
+    $this->scheduler->schedule($enactor);
+
     return $enactor;
   }
 

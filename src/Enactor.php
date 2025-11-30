@@ -8,27 +8,38 @@ use Fiber;
 use RuntimeException;
 use Throwable;
 
+/**
+ * @template V
+ */
 class Enactor
 {
+  /**
+   * @var Fiber<void, void, Outcome<V>, void>
+   */
   private Fiber $fiber;
+  private Lease $lease;
+
+  /**
+   * @var ?Outcome<V>
+   */
   private ?Outcome $outcome = null;
-  private ?Lease $lease = null;
 
-  public static function create(Effect $effect): Enactor
+  /**
+   * @template T
+   * @param Effect<T> $effect
+   * @param ?Lease $lease
+   * @return Enactor<T>
+   */
+  public static function create(Effect $effect, ?Lease $lease = null): self
   {
-    $fiber = new Fiber(function () use ($effect) {
-      return $effect->run();
-    });
+    /** @var Fiber<void, void, Outcome<T>, void> */
+    $fiber = new Fiber(fn () => $effect->run());
 
-    return new Enactor($fiber);
+    return new self($fiber, $lease ?? new Lease());
   }
 
   public function activate(): void
   {
-    if ($this->fiber->isTerminated()) {
-      return;
-    }
-
     if ($this->lease->isCancelled()) {
       $this->outcome = Failure::fromThrowable(new RuntimeException("Lease cancelled"));
       return;
@@ -49,7 +60,7 @@ class Enactor
     }
   }
 
-  public function await()
+  public function await(): void
   {
     while (!$this->isComplete()) {
       $this->activate();
@@ -66,8 +77,12 @@ class Enactor
     return $this->lease->isCancelled();
   }
 
-  private function __construct(Fiber $fiber)
+  /**
+   * @param Fiber<void, void, Outcome<V>, void> $fiber
+   */
+  private function __construct(Fiber $fiber, Lease $lease)
   {
     $this->fiber = $fiber;
+    $this->lease = $lease;
   }
 }

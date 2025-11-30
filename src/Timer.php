@@ -6,7 +6,6 @@ namespace Modoterra\Rune;
 
 class Timer
 {
-
   private float $dueTime;
 
   /**

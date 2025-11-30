@@ -6,32 +6,63 @@ namespace Modoterra\Rune;
 
 use Throwable;
 
+/**
+ * @template-covariant V
+ */
 abstract class Outcome
 {
-  protected ?Throwable $error = null;
-  protected mixed $value = null;
+  protected Throwable $error;
+
+  /**
+   * @var V
+   */
+  protected readonly mixed $value;
 
   abstract public function didSucceed(): bool;
 
   abstract public function didFail(): bool;
 
-  abstract public function map(callable $mapper): Outcome;
+  /**
+   * @template T
+   * @param callable(self<V>): self<T> $mapper
+   * @return self<T>
+   */
+  abstract public function map(callable $mapper): self;
 
-  abstract public function mapError(callable $mapper): Outcome;
+  /**
+   * @param callable(Throwable): Throwable $mapper
+   * @return self<never>
+   */
+  abstract public function mapError(callable $mapper): self;
 
+  /**
+   * @template T
+   * @param callable(V): T $mapper
+   * @return T
+   */
   abstract public function flatMap(callable $mapper): mixed;
 
   abstract public function getOrElse(mixed $value): mixed;
 
+  /**
+   * @template T
+   * @param ?callable(V): T $onSuccess
+   * @param ?callable(Throwable): T $onFailure
+   */
   abstract public function fold(?callable $onSuccess, ?callable $onFailure): mixed;
 
-  public function value(): mixed
-  {
-    return $this->value;
-  }
+  /**
+   * @return V
+   */
+  abstract public function value(): mixed;
 
-  public function error(): ?Throwable
+  abstract public function error(): Throwable;
+
+  /**
+   * @param V $value
+   */
+  protected function __construct(mixed $value)
   {
-    return $this->error;
+    $this->value = $value;
   }
 }
